@@ -182,7 +182,7 @@ startRangingBeacons(ServiceInstance service) {
 }
 
 Future<void> makePostRequest(String uuid) async {
-  debugPrint('POSTING: $uuid');
+  debugPrint('Posting data: $uuid');
   final url = Uri.parse(apiURL);
   final headers = {"Content-Type": "application/json"};
   final jsonBody = json.encode({"message": uuid});
