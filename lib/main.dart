@@ -317,6 +317,20 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
       home: Scaffold(
           appBar: AppBar(
             title: const Text('Monitoring Beacons'),
+            actions: [
+              IconButton(
+                  onPressed: () {
+                    WidgetsBinding.instance.removeObserver(this);
+                    if (_positionStreamSubscription != null) {
+                      FlutterBackgroundService().invoke('stopService');
+                      _positionStreamSubscription!.cancel();
+                      _positionStreamSubscription = null;
+                      startedLocationUpdates = false;
+                      SystemNavigator.pop();
+                    }
+                  },
+                  icon: const Icon(Icons.logout))
+            ],
           ),
           body: _buildResultsList()),
     );
