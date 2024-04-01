@@ -91,20 +91,6 @@ void onStart(ServiceInstance service) async {
 
   if (service is AndroidServiceInstance) {
     if (await service.isForegroundService()) {
-      // flutterLocalNotificationsPlugin.show(
-      //   888,
-      //   'COOL SERVICE',
-      //   'Awesome ${DateTime.now()}',
-      //   const NotificationDetails(
-      //     android: AndroidNotificationDetails(
-      //       'my_foreground',
-      //       'MY FOREGROUND SERVICE',
-      //       icon: 'ic_bg_service_small',
-      //       ongoing: true,
-      //     ),
-      //   ),
-      // );
-
       service.setForegroundNotificationInfo(
         title: "Beacon Scan Service",
         content: "Scan service is running.",
@@ -293,12 +279,12 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
                   children: <Widget>[
                     TextButton(
                       onPressed: () {
-                        // Perform your action here
-                        // For example, open location settings
-                        Geolocator.openLocationSettings();
+                        if (Platform.isAndroid) {
+                          Geolocator.openLocationSettings();
+                        }
                         cancelFunc(); // Close the custom notification
                       },
-                      child: Text('Open Settings'),
+                      child: Text((Platform.isAndroid) ? 'Open Settings' : 'OK'),
                     ),
                   ],
                 ),
