@@ -117,11 +117,6 @@ void onStart(ServiceInstance service) async {
 }
 
 checkPermissions() async {
-  // Notification permissions
-  if (Platform.isAndroid) {
-    await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()!.requestNotificationsPermission();
-  }
-
   // Bluetooth permissions
   await Permission.bluetoothScan.request();
   await Permission.bluetoothConnect.request();
@@ -133,12 +128,9 @@ checkPermissions() async {
     await Geolocator.requestPermission();
   }
 
-  // Location settings Android
+  // Notification permissions
   if (Platform.isAndroid) {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      await Geolocator.openLocationSettings();
-    }
+    await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()!.requestNotificationsPermission();
   }
 }
 
@@ -215,49 +207,110 @@ class MainApp extends StatefulWidget {
   State<MainApp> createState() => _MainAppState();
 }
 
-class _MainAppState extends State<MainApp> {
+class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
   final GeolocatorPlatform _geolocatorPlatform = GeolocatorPlatform.instance;
   StreamSubscription<Position>? _positionStreamSubscription;
   final ScrollController _scrollController = ScrollController();
+  bool startedLocationUpdates = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     startListeningLocationUpdates();
   }
 
-  startListeningLocationUpdates() {
-    if (_positionStreamSubscription == null) {
-      late LocationSettings locationSettings;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed && !startedLocationUpdates) {
+      startListeningLocationUpdates();
+    }
+  }
 
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        locationSettings = AndroidSettings(
+  startListeningLocationUpdates() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (serviceEnabled) {
+      startedLocationUpdates = true;
+      if (_positionStreamSubscription == null) {
+        late LocationSettings locationSettings;
+
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          locationSettings = AndroidSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 0,
+              intervalDuration: const Duration(seconds: 60),
+              foregroundNotificationConfig:
+                  const ForegroundNotificationConfig(notificationText: "Updating location every minute", notificationTitle: "Location Update", enableWakeLock: true, setOngoing: true));
+        } else if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS) {
+          locationSettings = AppleSettings(
+            accuracy: LocationAccuracy.high,
+            activityType: ActivityType.automotiveNavigation,
+            distanceFilter: 0,
+            pauseLocationUpdatesAutomatically: false,
+            showBackgroundLocationIndicator: false,
+          );
+        } else {
+          locationSettings = const LocationSettings(
             accuracy: LocationAccuracy.high,
             distanceFilter: 0,
-            intervalDuration: const Duration(seconds: 60),
-            foregroundNotificationConfig:
-                const ForegroundNotificationConfig(notificationText: "Updating location every minute", notificationTitle: "Location Update", enableWakeLock: true, setOngoing: true));
-      } else if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS) {
-        locationSettings = AppleSettings(
-          accuracy: LocationAccuracy.high,
-          activityType: ActivityType.automotiveNavigation,
-          distanceFilter: 0,
-          pauseLocationUpdatesAutomatically: false,
-          showBackgroundLocationIndicator: false,
-        );
-      } else {
-        locationSettings = const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 0,
-        );
+          );
+        }
+        final positionStream = _geolocatorPlatform.getPositionStream(locationSettings: locationSettings);
+        _positionStreamSubscription = positionStream.handleError((error) {
+          startedLocationUpdates = false;
+          debugPrint('Error: $error');
+          _positionStreamSubscription?.cancel();
+          _positionStreamSubscription = null;
+        }).listen((position) => handlePosition(position));
       }
-      final positionStream = _geolocatorPlatform.getPositionStream(locationSettings: locationSettings);
-      _positionStreamSubscription = positionStream.handleError((error) {
-        debugPrint('Error: $error');
-        _positionStreamSubscription?.cancel();
-        _positionStreamSubscription = null;
-      }).listen((position) => handlePosition(position));
+    } else {
+      showCustomLocationDialog();
+      startedLocationUpdates = false;
     }
+  }
+
+  void showCustomLocationDialog() {
+    BotToast.showCustomNotification(
+      toastBuilder: (cancelFunc) {
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 15),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Text(
+                  'Location Service Disabled',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Please enable location services to continue using this feature.',
+                  style: TextStyle(fontSize: 16),
+                ),
+                ButtonBar(
+                  children: <Widget>[
+                    TextButton(
+                      onPressed: () {
+                        // Perform your action here
+                        // For example, open location settings
+                        Geolocator.openLocationSettings();
+                        cancelFunc(); // Close the custom notification
+                      },
+                      child: Text('Open Settings'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      align: const Alignment(0, 0), // Center the card
+      duration: const Duration(seconds: 5), // How long the notification will be shown
+      animationDuration: const Duration(milliseconds: 300), // Animation duration
+    );
   }
 
   @override
@@ -266,6 +319,7 @@ class _MainAppState extends State<MainApp> {
       _positionStreamSubscription!.cancel();
       _positionStreamSubscription = null;
     }
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
