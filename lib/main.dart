@@ -35,14 +35,6 @@ void main() async {
 Future<void> initializeService() async {
   final service = FlutterBackgroundService();
 
-  /// OPTIONAL, using custom notification channel id
-  const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'beacon_poc', // id
-    'Beacon scan service', // title
-    description: 'This channel is used for important notifications.', // description
-    importance: Importance.low, // importance must be at low or higher level
-  );
-
   if (Platform.isIOS || Platform.isAndroid) {
     await flutterLocalNotificationsPlugin.initialize(
       const InitializationSettings(
@@ -52,7 +44,17 @@ Future<void> initializeService() async {
     );
   }
 
-  await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
+  if (Platform.isAndroid) {
+    /// OPTIONAL, using custom notification channel id
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'beacon_poc', // id
+      'Beacon scan service', // title
+      description: 'This channel is used for important notifications.', // description
+      importance: Importance.low, // importance must be at low or higher level
+    );
+
+    await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
+  }
 
   await service.configure(
     androidConfiguration: AndroidConfiguration(
@@ -228,7 +230,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
               intervalDuration: const Duration(seconds: 60),
               foregroundNotificationConfig:
                   const ForegroundNotificationConfig(notificationText: "Updating location every minute", notificationTitle: "Location Update", enableWakeLock: true, setOngoing: true));
-        } else if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS) {
+        } else if (defaultTargetPlatform == TargetPlatform.iOS) {
           locationSettings = AppleSettings(
             accuracy: LocationAccuracy.high,
             activityType: ActivityType.automotiveNavigation,
@@ -320,14 +322,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
             actions: [
               IconButton(
                   onPressed: () {
-                    WidgetsBinding.instance.removeObserver(this);
-                    if (_positionStreamSubscription != null) {
-                      FlutterBackgroundService().invoke('stopService');
-                      _positionStreamSubscription!.cancel();
-                      _positionStreamSubscription = null;
-                      startedLocationUpdates = false;
-                      SystemNavigator.pop();
-                    }
+                    stopServicesAndExit();
                   },
                   icon: const Icon(Icons.logout))
             ],
@@ -361,5 +356,16 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
             }
           }),
     );
+  }
+
+  void stopServicesAndExit() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (_positionStreamSubscription != null) {
+      FlutterBackgroundService().invoke('stopService');
+      _positionStreamSubscription!.cancel();
+      _positionStreamSubscription = null;
+      startedLocationUpdates = false;
+      SystemNavigator.pop();
+    }
   }
 }
